@@ -66,7 +66,7 @@ const CLI_CONFIG = readCliConfig();
 const API_URL = (process.env.CLIPY_API_URL || CLI_CONFIG.apiUrl || "https://clipy.online").replace(/\/+$/, "");
 const API_KEY = process.env.CLIPY_API_KEY || CLI_CONFIG.apiKey;
 const API_KEY_SOURCE = process.env.CLIPY_API_KEY ? "env CLIPY_API_KEY" : CLI_CONFIG.apiKey ? cliConfigPath() : null;
-const SERVER_VERSION = "0.16.1";
+const SERVER_VERSION = "0.17.0";
 
 /** Every keyless failure points at the same two fixes, cheapest one first. */
 const MISSING_KEY_MESSAGE =
@@ -104,8 +104,13 @@ function actionableApiError(status: number, message: string, path: string): stri
   switch (status) {
     case 401:
       return `${message} (HTTP 401 — the Clipy credential ${API_KEY_SOURCE ? `read from ${API_KEY_SOURCE}` : "is missing and"} is invalid, expired, or revoked.) Fix it, then retry: run \`clipy login\` in a terminal to approve this device (it writes ${cliConfigPath()}, which this server reads), or mint a key at ${API_URL}/settings/api-keys and set CLIPY_API_KEY in your MCP client config. Either way the credential is read at startup, so restart the MCP client afterwards. Retrying this call unchanged will fail identically.`;
-    case 403:
+    case 403: {
+      const scope = Object.keys(SCOPE_GRANTS).find((s) => message.includes(s));
+      if (scope) {
+        return `${message} (HTTP 403.) The key lacks "${scope}": ${SCOPE_GRANTS[scope]} at ${API_URL}/settings/api-keys, then restart the MCP client. Retrying with the same key cannot succeed.`;
+      }
       return `${message} (HTTP 403 — the API key is valid but lacks the scope this call needs, or the resource belongs to another account.) ${/\/edit(\?|$)/.test(path) ? 'Video editing (get_edit_transcript, edit_recording) needs a key with the "recordings:write" permission' : 'Write tools need a key with the "ingest" permission'}; mint one at ${API_URL}/settings/api-keys. Retrying with the same key cannot succeed.`;
+    }
     case 404:
       return `${message} (HTTP 404.) ${notFoundHint}`;
     case 429:
@@ -254,20 +259,82 @@ async function apiPostJson(path: string, payload: unknown, method: "POST" | "PUT
     }
     if (!res.ok) {
       const msg = (typeof body.error === "string" && body.error) || `Clipy API error ${res.status}`;
+      // Status and code ride on every error so callers can tell an explicit
+      // refusal from an ambiguous failure (see completionWasAmbiguous).
+      const detail = { status: res.status, ...(typeof body.code === "string" ? { code: body.code } : {}) };
       if (res.status === 403) {
-        throw new Error(
+        throw Object.assign(new Error(
           /\/edit$/.test(path)
             ? `${msg}\nedit_recording needs an API key with the "recordings:write" permission. ` +
                 `Mint one at ${API_URL}/settings/api-keys.`
             : `${msg}\nThe record tool needs an API key with the "ingest" permission. ` +
                 `Mint one at ${API_URL}/settings/api-keys (check "Record & upload").`,
-        );
+        ), detail);
       }
-      throw new Error(msg);
+      throw Object.assign(new Error(msg), detail);
     }
     return body;
   }
   throw new Error(`request failed after retries (${path})`);
+}
+
+/** The scope a v1 write needs, named in the 403 so the agent can tell the user exactly what to grant. */
+const SCOPE_GRANTS: Record<string, string> = {
+  "recordings:write": 'run `clipy login` again, or mint a key with "Edit recordings"',
+  "comments:read": 'run `clipy login` again, or mint a key with "Read comments"',
+  "comments:write": 'run `clipy login` again, or mint a key with "Comment"',
+  "analytics:read": 'run `clipy login` again, or mint a key with "View analytics"',
+  "recordings:delete": 'run `clipy login --allow-delete`, or mint a key with "Delete recordings"',
+  ingest: 'run `clipy login` again, or mint a key with "Record & upload"',
+};
+
+/**
+ * One attempt at a v1 write (PATCH/PUT/POST/DELETE). Never retried: posting a
+ * comment twice is worse than reporting a transient failure.
+ */
+async function apiSend(method: "POST" | "PUT" | "PATCH" | "DELETE", path: string, payload?: unknown): Promise<Json> {
+  if (!API_KEY) throw new Error(MISSING_KEY_MESSAGE);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  let res: Response;
+  let text: string;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${API_KEY}`,
+        Accept: "application/json",
+        "User-Agent": `clipy-mcp/${SERVER_VERSION}`,
+        ...(payload !== undefined ? { "Content-Type": "application/json" } : {}),
+      },
+      body: payload !== undefined ? JSON.stringify(payload) : undefined,
+      signal: controller.signal,
+    });
+    text = await res.text();
+  } catch (e) {
+    throw new Error((e as Error).name === "AbortError" ? `request timed out (${path})` : (e as Error).message);
+  } finally {
+    clearTimeout(timer);
+  }
+  let body: Json = {};
+  try {
+    body = text ? (JSON.parse(text) as Json) : {};
+  } catch {
+    body = { raw: text };
+  }
+  if (!res.ok) {
+    const msg = (typeof body.error === "string" && body.error) || `Clipy API error ${res.status}`;
+    if (res.status === 403) {
+      const scope = Object.keys(SCOPE_GRANTS).find((s) => msg.includes(s));
+      if (scope) {
+        throw new Error(
+          `${msg}\nThe key lacks "${scope}": ${SCOPE_GRANTS[scope]} at ${API_URL}/settings/api-keys, then restart the MCP client. Retrying with the same key cannot succeed.`,
+        );
+      }
+    }
+    throw new Error(actionableApiError(res.status, msg, path));
+  }
+  return body;
 }
 
 /** Upload one raw-upload chunk as multipart/form-data, retrying transient 429/5xx. */
@@ -276,6 +343,7 @@ async function apiPostChunk(
   uploadToken: string,
   partNumber: number,
   bytes: Uint8Array,
+  container: VideoContainer = "webm",
 ): Promise<void> {
   if (!API_KEY) throw new Error(MISSING_KEY_MESSAGE);
   for (let attempt = 1; attempt <= 4; attempt++) {
@@ -286,7 +354,11 @@ async function apiPostChunk(
     form.append("recordingId", recordingId);
     form.append("uploadToken", uploadToken);
     form.append("partNumber", String(partNumber));
-    form.append("file", new Blob([part], { type: "video/webm" }), `part-${partNumber}.webm`);
+    form.append(
+      "file",
+      new Blob([part], { type: container === "mp4" ? "video/mp4" : "video/webm" }),
+      `part-${partNumber}.${container}`,
+    );
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 120_000);
     let res: Response;
@@ -376,20 +448,27 @@ interface NarrationNote {
 }
 
 /** WebM files start with the EBML magic; refuse to upload corrupt captures. */
-function validateWebmFile(videoPath: string): number {
-  const size = statSync(videoPath).size;
-  if (size === 0) throw new Error("recording produced an empty file");
+type VideoContainer = "webm" | "mp4";
+
+/** WebM starts with the EBML magic; MP4 and QuickTime .mov carry `ftyp` at byte 4. */
+function validateVideoFile(videoPath: string): { sizeBytes: number; container: VideoContainer } {
+  const stat = statSync(videoPath);
+  if (!stat.isFile()) throw new Error(`not a file: ${videoPath}`);
+  if (stat.size === 0) throw new Error("the video file is empty");
   const fd = openSync(videoPath, "r");
   try {
-    const head = Buffer.alloc(4);
-    readSync(fd, head, 0, 4, 0);
-    if (!(head[0] === 0x1a && head[1] === 0x45 && head[2] === 0xdf && head[3] === 0xa3)) {
-      throw new Error("recording file is not valid WebM (corrupt capture?)");
+    const head = Buffer.alloc(8);
+    const read = readSync(fd, head, 0, 8, 0);
+    if (read >= 4 && head[0] === 0x1a && head[1] === 0x45 && head[2] === 0xdf && head[3] === 0xa3) {
+      return { sizeBytes: stat.size, container: "webm" };
     }
+    if (read >= 8 && head.subarray(4, 8).toString("ascii") === "ftyp") {
+      return { sizeBytes: stat.size, container: "mp4" };
+    }
+    throw new Error("the file is not WebM or MP4 (a QuickTime .mov also works)");
   } finally {
     closeSync(fd);
   }
-  return size;
 }
 
 /** Diagnostic line to stderr (the only channel a stdio MCP server can log to
@@ -1048,18 +1127,20 @@ async function openCaptureContext(
 }
 
 /**
- * Streams a captured WebM through the raw-upload pipeline
- * (initiate → chunks → finalize → complete). Shared by the one-shot `record`
- * tool and the session tools. Aborts the server-side session on failure.
+ * Streams a WebM or MP4 through the raw-upload pipeline
+ * (initiate → chunks → finalize → complete). Shared by the `record` tool, the
+ * session tools and `upload_video`. Aborts the server-side session on failure.
  */
-async function uploadCapturedWebm(opts: {
+async function uploadVideoFile(opts: {
   videoPath: string;
   name?: string;
+  nameIsUserProvided?: boolean;
   description?: string;
   recordingKind?: string;
+  accessMode?: "public" | "restricted" | "private";
   narration?: { text?: string; notes?: NarrationNote[] };
 }): Promise<{ publicId: string; sizeBytes: number }> {
-  const sizeBytes = validateWebmFile(opts.videoPath);
+  const { sizeBytes, container } = validateVideoFile(opts.videoPath);
   const recordingId = randomUUID();
   let uploadToken = "";
   let publicId = "";
@@ -1067,7 +1148,7 @@ async function uploadCapturedWebm(opts: {
     const init = await apiPostJson("/api/videos/raw-upload/initiate", {
       recordingId,
       createVideoRow: true,
-      sourcePlatform: "web",
+      sourcePlatform: "mcp",
       sourceVersion: `mcp/${SERVER_VERSION}`,
     });
     uploadToken = String(init.uploadToken ?? "");
@@ -1083,7 +1164,7 @@ async function uploadCapturedWebm(opts: {
       while (offset < sizeBytes) {
         const bytesRead = readSync(fd, buffer, 0, PART_SIZE, offset);
         if (bytesRead <= 0) break;
-        await apiPostChunk(recordingId, uploadToken, partNumber, buffer.subarray(0, bytesRead));
+        await apiPostChunk(recordingId, uploadToken, partNumber, buffer.subarray(0, bytesRead), container);
         offset += bytesRead;
         partNumber++;
       }
@@ -1097,8 +1178,10 @@ async function uploadCapturedWebm(opts: {
       uploadToken,
       name: opts.name,
       description: opts.description,
-      sourcePlatform: "web",
+      sourcePlatform: "mcp",
       sourceVersion: `mcp/${SERVER_VERSION}`,
+      ...(opts.nameIsUserProvided && opts.name ? { nameIsUserProvided: true } : {}),
+      ...(opts.accessMode ? { accessMode: opts.accessMode } : {}),
       ...(opts.recordingKind ? { recordingKind: opts.recordingKind } : {}),
       ...(opts.narration && (opts.narration.text || opts.narration.notes?.length)
         ? { narration: opts.narration }
@@ -1106,12 +1189,57 @@ async function uploadCapturedWebm(opts: {
     });
     uploadToken = ""; // completed — nothing to abort
   } catch (e) {
-    if (uploadToken) {
-      await apiPostJson("/api/videos/raw-upload/abort", { recordingId, uploadToken }).catch(() => {});
+    // A /complete whose responses were all lost may still have committed; the
+    // server then refuses the abort as already_attached, which proves the
+    // recording exists. Reporting failure would invite a duplicate upload.
+    // An explicit answer from the route (503 access_mode_pending, queue_pending,
+    // claim_pending) is not a success, but the recording exists: the error
+    // names it so the agent never uploads the file again.
+    // A coded pending answer already says the recording exists or is being
+    // committed: name it directly, without depending on an abort that could
+    // itself fail, and without aborting a commit still in flight.
+    const code = (e as { code?: string }).code;
+    if (publicId && code === "access_mode_pending") {
+      throw new Error(
+        `Uploaded as ${publicId}, but the requested sharing (${opts.accessMode ?? "default"}) could not be applied, so it may still be readable at the account's default access. Do not upload again: call set_recording_privacy with id "${publicId}" to set it.`,
+      );
     }
-    throw e;
+    if (publicId && code && PENDING_COMPLETION_CODES.has(code)) {
+      throw new Error(
+        `Uploaded as ${publicId}, but the server did not confirm its completion (${(e as Error).message}). Do not upload again: the recording exists; check it with get_recording id "${publicId}".`,
+      );
+    }
+    let attached = false;
+    if (uploadToken) {
+      await apiPostJson("/api/videos/raw-upload/abort", { recordingId, uploadToken }).catch(
+        (abortError: unknown) => {
+          attached = (abortError as { code?: string }).code === "already_attached";
+        },
+      );
+    }
+    if (!publicId || !attached) throw e;
+    if (!completionWasAmbiguous(e)) {
+      throw new Error(
+        `Uploaded as ${publicId}, but the server did not confirm its completion (${(e as Error).message}). Do not upload again: the recording exists; check it with get_recording id "${publicId}".`,
+      );
+    }
   }
   return { publicId, sizeBytes };
+}
+
+/**
+ * Whether a failed /complete may have committed unseen: no HTTP response at
+ * all (network error, timeout), or a 502/504 from the gateway in front of the
+ * app. Every answer the route itself gives (503 access_mode_pending, a 500
+ * that marked the recording failed) is explicit and never a success.
+ */
+/** /complete answers that mean the recording exists or is being committed. */
+const PENDING_COMPLETION_CODES = new Set(["access_mode_pending", "queue_pending", "claim_pending"]);
+
+function completionWasAmbiguous(error: unknown): boolean {
+  const { status, code } = error as { status?: number; code?: string };
+  if (typeof status !== "number") return true;
+  return !code && (status === 502 || status === 504);
 }
 
 function ok(data: unknown) {
@@ -2208,7 +2336,7 @@ server.tool(
         text: n.text.trim(),
       }));
       const allNotes = [...autoNotes, ...userNotes].sort((a, b) => a.startMs - b.startMs);
-      const uploaded = await uploadCapturedWebm({
+      const uploaded = await uploadVideoFile({
         videoPath,
         name,
         description,
@@ -2353,7 +2481,7 @@ function finishSession(session: McpRecordingSession, mode: "stop" | "abort"): Pr
       const verificationNote = buildVerificationNote(session);
       if (verificationNote) collected.unshift({ startMs: 0, text: verificationNote });
       const notes = collected.sort((a, b) => a.startMs - b.startMs);
-      const uploaded = await uploadCapturedWebm({
+      const uploaded = await uploadVideoFile({
         videoPath,
         name: session.name,
         description: session.description,
@@ -3334,6 +3462,220 @@ server.tool(
           },
         ],
       };
+    } catch (e) {
+      return fail((e as Error).message);
+    }
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Library management: the write half the hosted server already had (update,
+// organize, sharing, folders), plus comments, analytics, upload and delete.
+// ---------------------------------------------------------------------------
+
+function recordingPath(id: string, sub = ""): string {
+  return `/api/v1/recordings/${encodeURIComponent(normalizeId(id))}${sub}`;
+}
+
+server.tool(
+  "update_recording",
+  "Rename a recording or rewrite its description. Renaming also stops Clipy's auto-titling from overwriting the name later. Pass description: null to clear it. Needs a key with recordings:write.",
+  {
+    id: recordingIdSchema,
+    name: z.string().min(1).max(200).optional().describe("The new title. Omit to leave the title alone."),
+    description: z.string().max(5000).nullable().optional().describe("The new description, or null to clear it."),
+  },
+  { title: "Update a Clipy recording", readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
+  async ({ id, name, description }) => {
+    try {
+      const body: Json = {};
+      if (name !== undefined) body.name = name;
+      if (description !== undefined) body.description = description;
+      if (Object.keys(body).length === 0) return fail("Pass name and/or description.");
+      return ok(await apiSend("PATCH", recordingPath(id), body));
+    } catch (e) {
+      return fail((e as Error).message);
+    }
+  },
+);
+
+server.tool(
+  "organize_recording",
+  "File a recording into a folder and/or change its tags. Get folder ids from list_folders (or create_folder); pass folderId: null to unfile it. Needs recordings:write.",
+  {
+    id: recordingIdSchema,
+    folderId: z.string().nullable().optional().describe("Destination folder id from list_folders, or null to unfile."),
+    addTags: z.array(z.string()).optional().describe("Tags to add (max 20 on a recording)."),
+    removeTags: z.array(z.string()).optional().describe("Tags to remove."),
+  },
+  { title: "Organize a Clipy recording", readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+  async ({ id, folderId, addTags, removeTags }) => {
+    try {
+      const body: Json = {};
+      if (folderId !== undefined) body.folderId = folderId;
+      if (addTags) body.addTags = addTags;
+      if (removeTags) body.removeTags = removeTags;
+      return ok(await apiSend("PATCH", recordingPath(id, "/organize"), body));
+    } catch (e) {
+      return fail((e as Error).message);
+    }
+  },
+);
+
+server.tool(
+  "set_recording_privacy",
+  "Change who can open a recording's share link: 'public' (anyone with the link), 'restricted' (only the people and domains already on its list), or 'private' (owner only). It never invites or emails anyone. Confirm with the user before making a private recording public. Needs recordings:write.",
+  {
+    id: recordingIdSchema,
+    mode: z.enum(["public", "restricted", "private"]),
+  },
+  { title: "Change a Clipy recording’s sharing", readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
+  async ({ id, mode }) => {
+    try {
+      return ok(await apiSend("PUT", recordingPath(id, "/access"), { mode }));
+    } catch (e) {
+      return fail((e as Error).message);
+    }
+  },
+);
+
+server.tool(
+  "list_folders",
+  "List the user's folders with ids and item counts. Call this before organize_recording to turn a folder name into its id.",
+  {},
+  { title: "List Clipy folders", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  async () => {
+    try {
+      return ok(await api("/api/v1/folders"));
+    } catch (e) {
+      return fail((e as Error).message);
+    }
+  },
+);
+
+server.tool(
+  "create_folder",
+  "Create a folder. If one with that name exists it is returned instead (the response's `created` says which). Needs recordings:write.",
+  { name: z.string().min(1).max(60) },
+  { title: "Create a Clipy folder", readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  async ({ name }) => {
+    try {
+      return ok(await apiSend("POST", "/api/v1/folders", { name }));
+    } catch (e) {
+      return fail((e as Error).message);
+    }
+  },
+);
+
+server.tool(
+  "list_comments",
+  "Read the comment thread on a recording: top-level comments with the moment they point at (timestampMs), replies (parentCommentId), and resolved state. Use it to see what reviewers flagged. Author names only. Needs comments:read.",
+  { id: recordingIdSchema },
+  { title: "List comments on a recording", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  async ({ id }) => {
+    try {
+      return ok(await api(recordingPath(id, "/comments")));
+    } catch (e) {
+      return fail((e as Error).message);
+    }
+  },
+);
+
+server.tool(
+  "add_comment",
+  "Post a comment on a recording the user owns, under the user's name: a new comment pinned to timestampMs, or a reply when parentCommentId is given. Everyone in the thread is notified, so show the user the exact text and get their go-ahead first. Needs comments:write.",
+  {
+    id: recordingIdSchema,
+    body: z.string().min(1).max(2000).describe("The comment text."),
+    timestampMs: z.number().int().min(0).optional().describe("Where in the video the comment points (new comments)."),
+    parentCommentId: z.string().optional().describe("Reply to this comment from list_comments."),
+  },
+  { title: "Comment on a Clipy recording", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  async ({ id, body, timestampMs, parentCommentId }) => {
+    try {
+      const payload = parentCommentId
+        ? { kind: "reply", body, parentCommentId }
+        : { kind: "comment", body, timestampMs: timestampMs ?? 0 };
+      return ok(await apiSend("POST", recordingPath(id, "/comments"), payload));
+    } catch (e) {
+      return fail((e as Error).message);
+    }
+  },
+);
+
+server.tool(
+  "get_analytics",
+  "Who watched a recording and how far: opens, unique viewers, plays, average completion, retention, viewers by name, breakdowns. Pro feature; a free account gets gated:true with the totals only. Needs analytics:read.",
+  {
+    id: recordingIdSchema,
+    rangeDays: z.number().int().min(1).max(365).optional().describe("Days in the daily series (default 30). Every other figure is lifetime."),
+  },
+  { title: "Get recording analytics", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  async ({ id, rangeDays }) => {
+    try {
+      return ok(await api(`${recordingPath(id, "/analytics")}${rangeDays ? `?range=${rangeDays}` : ""}`));
+    } catch (e) {
+      return fail((e as Error).message);
+    }
+  },
+);
+
+server.tool(
+  "upload_video",
+  "Upload a video file from this machine (WebM, MP4, or QuickTime .mov) to the user's Clipy library and return its share link and agent-context link. Processing (transcript, summary, key moments) starts automatically; call wait_for_artifacts next if you need them. Counts toward the user's recording allowance. Needs a key with ingest.",
+  {
+    path: z.string().describe("Absolute path of the video file."),
+    name: z.string().min(1).max(200).optional().describe("Title. Defaults to the file name."),
+    description: z.string().max(5000).optional(),
+    type: z.string().optional().describe("What the video is: bug, feature, demo, walkthrough, feedback, discussion or other."),
+    access: z.enum(["public", "restricted", "private"]).optional().describe("Who can open the link. Omit for the account default."),
+  },
+  { title: "Upload a video to Clipy", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  async ({ path, name, description, type, access }) => {
+    try {
+      const videoPath = resolve(path);
+      if (!existsSync(videoPath)) return fail(`No such file: ${videoPath}`);
+      let recordingKind: string | undefined;
+      if (type) {
+        recordingKind = normalizeRecordingKind(type) ?? undefined;
+        if (!recordingKind) return fail(`type "${type}" is not a recording kind (bug, feature, demo, walkthrough, feedback, discussion, other).`);
+      }
+      const title = name ?? basename(videoPath).replace(/\.[^.]+$/, "");
+      const uploaded = await uploadVideoFile({
+        videoPath,
+        name: title,
+        nameIsUserProvided: name !== undefined,
+        description,
+        recordingKind,
+        accessMode: access,
+      });
+      return ok({
+        publicId: uploaded.publicId,
+        shareUrl: `${API_URL}/video/${uploaded.publicId}`,
+        contextUrl: `${API_URL}/video/${uploaded.publicId}.arec`,
+        sizeBytes: uploaded.sizeBytes,
+      });
+    } catch (e) {
+      return fail((e as Error).message);
+    }
+  },
+);
+
+server.tool(
+  "delete_recording",
+  "PERMANENTLY delete a recording: video, transcript, summary, key moments and comments. There is no trash and no undo. Only call this when the user explicitly asked to delete this specific recording, and repeat its id in `confirm`. Needs a key with recordings:delete (`clipy login --allow-delete`).",
+  {
+    id: recordingIdSchema,
+    confirm: z.string().describe("The recording's public id again. Must match `id` exactly."),
+  },
+  { title: "Permanently delete a Clipy recording", readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+  async ({ id, confirm }) => {
+    try {
+      const publicId = normalizeId(id);
+      if (normalizeId(confirm) !== publicId) {
+        return fail("confirm must repeat the recording's id exactly. Nothing was deleted.");
+      }
+      return ok(await apiSend("DELETE", `${recordingPath(publicId)}?confirm=${encodeURIComponent(publicId)}`));
     } catch (e) {
       return fail((e as Error).message);
     }

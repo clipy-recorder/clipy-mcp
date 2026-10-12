@@ -1,6 +1,6 @@
 {
   "name": "@clipy/mcp",
-  "version": "0.16.1",
+  "version": "0.17.0",
   "mcpName": "online.clipy/mcp",
   "description": "Model Context Protocol (MCP) server for Clipy \u2014 give Claude, Cursor, and other AI agents read access to your screen recordings' transcripts, AI summaries, and key moments with frames.",
   "license": "MIT",
@@ -33,7 +33,7 @@
     "build": "tsc",
     "prepublishOnly": "npm run build",
     "start": "node dist/index.js",
-    "test": "npm run build && node scripts/agent-readiness.test.mjs && node scripts/arec-range.test.mjs && node scripts/browser-diagnostics.test.mjs"
+    "test": "npm run build && node scripts/agent-readiness.test.mjs && node scripts/arec-range.test.mjs && node scripts/browser-diagnostics.test.mjs && node scripts/library-tools.test.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",

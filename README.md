@@ -141,6 +141,15 @@ support@clipy.online.
 | `list_context_documents` | List the user's **context documents** — YouTube videos and local video files they imported with `clipy context import`, so agents can read them. A separate library from their own screen recordings. |
 | `get_context_document` | One context document's metadata: source, duration, tags, the server's classification (video type, whether visual evidence is needed, planned moments), and which transcript/frames exist. Not the transcript itself. |
 | `read_context_document` | Read a context document as compiled markdown — header, metadata, then the timestamped transcript with frame captions interleaved. Takes `startMs`/`endMs` so you can walk a two-hour video section by section instead of flooding your context. |
+| `update_recording` | Rename a recording or edit its description (needs `recordings:write`). |
+| `organize_recording` | File into a folder and add or remove tags (needs `recordings:write`). |
+| `set_recording_privacy` | Switch the share link between public, restricted and private. Never invites or emails anyone (needs `recordings:write`). |
+| `list_folders` / `create_folder` | Folders with ids; create is idempotent by name. |
+| `list_comments` | The comment thread: timestamped comments, replies, resolved state. Author names only (needs `comments:read`). |
+| `add_comment` | Comment at a moment or reply, as the key's owner. Everyone in the thread is notified (needs `comments:write`). |
+| `get_analytics` | Views, unique viewers, completion and who watched (needs `analytics:read`). Free accounts get the totals only. |
+| `upload_video` | Upload a WebM, MP4 or QuickTime `.mov` from this machine and get its share and agent-context links (needs `ingest`). |
+| `delete_recording` | **Permanently** delete a recording. `confirm` must repeat the id (needs `recordings:delete`, from `clipy login --allow-delete`). |
 | `replace_transcript` | **Replace a recording's transcript** with text you author (needs the `ingest` scope). Call `get_transcript` first and pass its `revision`; stale replacements are rejected instead of overwriting a concurrent edit. The summary regenerates automatically. Marked as agent-edited, never passed off as speech-to-text. |
 
 Read tools accept a recording's **public id** (the slug in its share URL) or the full
