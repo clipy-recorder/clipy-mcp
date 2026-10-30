@@ -155,9 +155,10 @@ support@clipy.online.
 Read tools accept a recording's **public id** (the slug in its share URL) or the full
 `https://clipy.online/video/<id>` URL.
 
-> **Capturing the real screen is CLI-only.** These tools record a headless Chromium page.
-> To record the actual screen or a single app window (the Mac app on macOS, the X display on Linux; the real
-> logged-in browser), use the Clipy CLI: `clipy record --source screen --window "<app>"`.
+> **Who records what.** These MCP tools record the browser (a headless Chromium page Clipy owns).
+> The Clipy CLI records Mac windows, displays and the iOS Simulator (`--source mac-screen`) and Linux
+> screens (`--source screen`, including a private virtual display), and the Clipy Mac and Windows apps
+> record everything else, including the real logged-in browser.
 
 ### Using `record`
 
@@ -235,9 +236,9 @@ footage of the wrong thing. **Clipy will never focus or foreground a window or t
 pointing the driver and the camera at the same surface is the caller's job.
 
 `kind` is always `headless_browser` here: these tools record a headless page Clipy owns.
-Capturing a real application window or a display is CLI-only
-(`clipy record --source screen --window "<app>"`), so no window id or window title is
-reported — an empty or invented one would be exactly the kind of false confidence this
+Real application windows and displays are recorded by the Clipy CLI
+(`clipy record --source mac-screen --window "<app>"` on a Mac, `--source screen` on Linux),
+so no window id or window title is reported here. An empty or invented one would be exactly the kind of false confidence this
 field exists to prevent.
 
 ### Evidence on a marker: two provenances
