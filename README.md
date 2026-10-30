@@ -3,7 +3,7 @@
 Give your AI agent access to your [Clipy](https://clipy.online) screen recordings.
 
 > Developed in the Clipy monorepo. A public mirror for browsing the source and filing
-> issues lives at **[github.com/manovagyanik1/clipy-mcp](https://github.com/manovagyanik1/clipy-mcp)**
+> issues lives at **[github.com/clipy-recorder/clipy-mcp](https://github.com/clipy-recorder/clipy-mcp)**
 > (MIT), kept in sync with each npm release.
 
 This is a [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server. It lets

@@ -45,10 +45,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/manovagyanik1/clipy-mcp.git"
+    "url": "git+https://github.com/clipy-recorder/clipy-mcp.git"
   },
   "homepage": "https://clipy.online/for-agents",
   "bugs": {
-    "url": "https://github.com/manovagyanik1/clipy-mcp/issues"
+    "url": "https://github.com/clipy-recorder/clipy-mcp/issues"
   }
 }

@@ -12,11 +12,11 @@
   },
   "homepage": "https://clipy.online/mcp",
   "documentation": "https://clipy.online/docs/mcp",
-  "support": "https://github.com/manovagyanik1/clipy-mcp/issues",
+  "support": "https://github.com/clipy-recorder/clipy-mcp/issues",
   "icon": "icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/manovagyanik1/clipy-mcp"
+    "url": "https://github.com/clipy-recorder/clipy-mcp"
   },
   "license": "MIT",
   "keywords": ["screen-recording", "transcript", "video", "summary", "loom-alternative"],
