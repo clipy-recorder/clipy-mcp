@@ -3,7 +3,7 @@
   "name": "online.clipy/mcp",
   "description": "Read your Clipy screen recordings: search, transcripts, AI summaries, and key moments with frames.",
   "repository": {
-    "url": "https://github.com/manovagyanik1/clipy-mcp",
+    "url": "https://github.com/clipy-recorder/clipy-mcp",
     "source": "github"
   },
   "websiteUrl": "https://clipy.online/mcp",
