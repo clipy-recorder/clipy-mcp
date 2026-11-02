@@ -66,7 +66,7 @@ const CLI_CONFIG = readCliConfig();
 const API_URL = (process.env.CLIPY_API_URL || CLI_CONFIG.apiUrl || "https://clipy.online").replace(/\/+$/, "");
 const API_KEY = process.env.CLIPY_API_KEY || CLI_CONFIG.apiKey;
 const API_KEY_SOURCE = process.env.CLIPY_API_KEY ? "env CLIPY_API_KEY" : CLI_CONFIG.apiKey ? cliConfigPath() : null;
-const SERVER_VERSION = "0.17.1";
+const SERVER_VERSION = "0.18.0";
 
 /** Every keyless failure points at the same two fixes, cheapest one first. */
 const MISSING_KEY_MESSAGE =
@@ -1364,7 +1364,7 @@ server.tool(
 
 server.tool(
   "get_recording",
-  "Get a single recording's metadata: title, description, duration, pipeline stage (uploading → transcoding → transcribing → annotating → ready), and the statuses of its transcript, AI summary, and key moments.",
+  "Get a single recording's metadata: title, description, duration, pipeline stage (uploading → transcoding → transcribing → annotating → ready), the statuses of its transcript, AI summary, and key moments, and expectedResult: what the person who recorded it expected to happen. When expectedResult is set, read the recording with it in mind: if what the recording shows differs from it, that difference is likely what the user wants looked at, and what matches it is intended. Null means nobody stated it (most recordings).",
   { id: recordingIdSchema },
   async ({ id }) => {
     try {
@@ -3479,19 +3479,21 @@ function recordingPath(id: string, sub = ""): string {
 
 server.tool(
   "update_recording",
-  "Rename a recording or rewrite its description. Renaming also stops Clipy's auto-titling from overwriting the name later. Pass description: null to clear it. Needs a key with recordings:write.",
+  "Rename a recording, rewrite its description, or set what the recorder expected to happen (expectedResult). Renaming also stops Clipy's auto-titling from overwriting the name later. Pass description or expectedResult as null to clear it. Needs a key with recordings:write.",
   {
     id: recordingIdSchema,
     name: z.string().min(1).max(200).optional().describe("The new title. Omit to leave the title alone."),
     description: z.string().max(5000).nullable().optional().describe("The new description, or null to clear it."),
+    expectedResult: z.string().max(1000).nullable().optional().describe("What the recorder expected to happen, or null to clear it."),
   },
   { title: "Update a Clipy recording", readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
-  async ({ id, name, description }) => {
+  async ({ id, name, description, expectedResult }) => {
     try {
       const body: Json = {};
       if (name !== undefined) body.name = name;
       if (description !== undefined) body.description = description;
-      if (Object.keys(body).length === 0) return fail("Pass name and/or description.");
+      if (expectedResult !== undefined) body.expectedResult = expectedResult;
+      if (Object.keys(body).length === 0) return fail("Pass name, description and/or expectedResult.");
       return ok(await apiSend("PATCH", recordingPath(id), body));
     } catch (e) {
       return fail((e as Error).message);

@@ -7,8 +7,8 @@ Give your AI agent access to your [Clipy](https://clipy.online) screen recording
 > (MIT), kept in sync with each npm release.
 
 This is a [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server. It lets
-Claude, Cursor, Windsurf, and other MCP-capable agents **search your recordings and read
-their transcripts and AI summaries** — so you can do things like _"turn this bug-report
+Claude, Cursor, Windsurf, and other MCP-capable agents **search your recordings and your team
+library, and read their transcripts and AI summaries**, so you can do things like _"turn this bug-report
 recording into a Linear ticket"_ without leaving your agent — and, with the `record`
 tool, **record a web app headlessly** and get it back as a Clipy recording (_"build the
 feature, then record the outcome"_).
@@ -22,7 +22,7 @@ write tools — `record`, the session tools (`start_recording`, `add_marker`, `a
 `stop_recording`, `abort_recording`), and `replace_transcript` — additionally need the
 key to carry the `ingest` scope ("Record & upload"), which the server enforces.
 `get_edit_transcript` and `edit_recording` need the `recordings:write` scope. A `recordings:read`-only key can
-read your recordings but cannot create, modify, or delete anything.
+read every recording you can open but cannot create, modify, or delete anything.
 
 ## Setup
 
@@ -119,8 +119,8 @@ support@clipy.online.
 | Tool | What it does |
 | --- | --- |
 | `search_memory` | **Search the whole Clipy memory at once** — every screen recording the user made *and* every video they imported — returning the matching moments with timestamps and a URL that opens at that point. Matching is semantic as well as literal, so "login flow" finds a moment where someone said "the authentication screen". Reach for this first when the user refers to something they showed, recorded, or watched; the per-library tools below each see only half the picture. Each hit carries `kind` (`recording` or `context`) to tell you which tool to read next, a `resolution` saying whether its timestamp is an exact moment or a ~50s span, and a `semantic.status` to check before treating an empty result as "nothing recorded". |
-| `search_recordings` | Search your recordings by keyword (title + description). |
-| `list_recordings` | List your most recent recordings. |
+| `search_recordings` | Search the recordings you can open by keyword (title + description). Optional `scope` (`mine`, `team`, `shared`, `all`) and `workspace`. |
+| `list_recordings` | List the most recent recordings you can open, with each one's maker and workspace. Optional `scope` and `workspace`. |
 | `get_recording` | Metadata for one recording (status, duration, transcript/summary status). |
 | `get_transcript` | The full timestamped transcript + plaintext. |
 | `get_summary` | The AI summary: TL;DR, key points, action items. |
@@ -301,6 +301,7 @@ await page.evaluate(() => window.__clipyChapter("AFTER — fix applied"));
 
 ## Privacy
 
-Your key only ever reads **your own** recordings. Revoke it any time at
+Your key reads the recordings you can open in Clipy: your own, your team library and
+Spaces, and recordings shared with you, with the same permissions as the app. Revoke it any time at
 `/settings/api-keys`. The server runs locally on your machine; your key is never sent
 anywhere except to the Clipy API over HTTPS.
