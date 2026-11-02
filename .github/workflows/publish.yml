@@ -29,6 +29,9 @@ jobs:
       - run: npm run build
       # Trusted publishing needs npm 11.5.1 or later.
       - run: npm install -g npm@11
+      - run: |
+          npm --version
+          if [ -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then echo "GitHub OIDC endpoint available"; else echo "No GitHub OIDC endpoint (id-token: write missing?)"; fi
       # Skips a version npm already has, so "Re-run failed jobs" can retry the
       # registry step below instead of dying on npm's E403 for a re-publish.
       - name: Publish to npm
@@ -37,7 +40,7 @@ jobs:
           if npm view "@clipy/mcp@${VERSION}" version >/dev/null 2>&1; then
             echo "@clipy/mcp@${VERSION} is already on npm; skipping npm publish."
           else
-            npm publish --access public
+            npm publish --access public --loglevel verbose
           fi
 
       # The MCP Registry (registry.modelcontextprotocol.io) is a public
