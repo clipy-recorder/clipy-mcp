@@ -1,16 +1,53 @@
 # @clipy/mcp
 
-Give your AI agent access to your [Clipy](https://clipy.online) screen recordings.
+[![npm version](https://img.shields.io/npm/v/%40clipy%2Fmcp)](https://www.npmjs.com/package/@clipy/mcp)
+[![license: MIT](https://img.shields.io/npm/l/%40clipy%2Fmcp)](https://github.com/clipy-recorder/clipy-mcp/blob/main/LICENSE)
+[![node >= 18](https://img.shields.io/node/v/%40clipy%2Fmcp)](https://www.npmjs.com/package/@clipy/mcp)
 
-> Developed in the Clipy monorepo. A public mirror for browsing the source and filing
-> issues lives at **[github.com/clipy-recorder/clipy-mcp](https://github.com/clipy-recorder/clipy-mcp)**
-> (MIT), kept in sync with each npm release.
+The official screen recording MCP server for [Clipy](https://clipy.online), the AI-native
+screen recorder: your AI agent searches your recordings and reads their transcripts, AI
+summaries and key moments.
+
+## Quick start
+
+Hosted, nothing to install. Add this URL as a connector in Claude, ChatGPT or any client
+that speaks Streamable HTTP, and sign in:
+
+```text
+https://clipy.online/api/mcp
+```
+
+Or run it locally with `npx`:
+
+```bash
+npx @clipy/cli@latest login                              # approve once in the browser
+claude mcp add --scope user clipy -- npx -y @clipy/mcp   # Codex, Cursor, Windsurf: see Setup
+```
+
+## What your agent gets
+
+Record your screen and talk. Then hand the link to your agent, the way you would show a
+colleague:
+
+```text
+You:    Turn this bug-report recording into a Linear ticket:
+        https://clipy.online/video/3kelcef8wo8h
+
+Agent:  get_recording     status, duration, transcript and summary status
+        get_summary       TL;DR, key points, action items
+        get_transcript    the full timestamped transcript and plaintext
+        get_key_moments   timestamps, captions and click coordinates
+```
+
+No link to hand over? `search_memory` finds the moment across every recording you made
+and every video you imported, and returns a URL that opens at that point. The full list
+is under [Tools](#tools).
 
 This is a [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server. It lets
 Claude, Cursor, Windsurf, and other MCP-capable agents **search your recordings and your team
 library, and read their transcripts and AI summaries**, so you can do things like _"turn this bug-report
-recording into a Linear ticket"_ without leaving your agent — and, with the `record`
-tool, **record a web app headlessly** and get it back as a Clipy recording (_"build the
+recording into a Linear ticket"_ without leaving your agent. With the `record`
+tool, it can also **record a web app headlessly** and get it back as a Clipy recording (_"build the
 feature, then record the outcome"_).
 
 The canonical cross-surface operating contract is
@@ -305,3 +342,9 @@ Your key reads the recordings you can open in Clipy: your own, your team library
 Spaces, and recordings shared with you, with the same permissions as the app. Revoke it any time at
 `/settings/api-keys`. The server runs locally on your machine; your key is never sent
 anywhere except to the Clipy API over HTTPS.
+
+## Source
+
+Developed in the Clipy monorepo. A public mirror for browsing the source and filing
+issues lives at **[github.com/clipy-recorder/clipy-mcp](https://github.com/clipy-recorder/clipy-mcp)**
+(MIT), kept in sync with each npm release.

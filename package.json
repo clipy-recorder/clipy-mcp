@@ -1,8 +1,8 @@
 {
   "name": "@clipy/mcp",
-  "version": "0.18.0",
+  "version": "0.19.0",
   "mcpName": "online.clipy/mcp",
-  "description": "Model Context Protocol (MCP) server for Clipy — give Claude, Cursor, and other AI agents read access to your screen recordings' transcripts, AI summaries, and key moments with frames.",
+  "description": "Model Context Protocol (MCP) server for Clipy, the AI-native screen recorder: give Claude, Cursor, and other AI agents your screen recordings' transcripts, AI summaries, and key moments with frames.",
   "license": "MIT",
   "type": "module",
   "publishConfig": {
@@ -27,7 +27,11 @@
     "ai-agent",
     "claude",
     "cursor",
-    "loom-alternative"
+    "loom-alternative",
+    "mcp-server",
+    "screen-recorder",
+    "claude-code",
+    "codex"
   ],
   "scripts": {
     "build": "tsc",
@@ -47,7 +51,7 @@
     "type": "git",
     "url": "git+https://github.com/clipy-recorder/clipy-mcp.git"
   },
-  "homepage": "https://clipy.online/for-agents",
+  "homepage": "https://clipy.online/docs/mcp",
   "bugs": {
     "url": "https://github.com/clipy-recorder/clipy-mcp/issues"
   }

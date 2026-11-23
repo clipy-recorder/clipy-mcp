@@ -1,19 +1,20 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "online.clipy/mcp",
-  "description": "Read your Clipy screen recordings: search, transcripts, AI summaries, and key moments with frames.",
+  "title": "Clipy",
+  "description": "Search, read and send your Clipy screen recordings: transcripts, summaries and key moments.",
   "repository": {
     "url": "https://github.com/clipy-recorder/clipy-mcp",
     "source": "github"
   },
   "websiteUrl": "https://clipy.online/mcp",
-  "version": "0.18.0",
+  "version": "0.19.0",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@clipy/mcp",
-      "version": "0.18.0",
+      "version": "0.19.0",
       "transport": {
         "type": "stdio"
       },
@@ -33,6 +34,12 @@
           "isSecret": false
         }
       ]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://clipy.online/api/mcp"
     }
   ]
 }
