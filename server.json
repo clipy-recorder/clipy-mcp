@@ -8,13 +8,25 @@
     "source": "github"
   },
   "websiteUrl": "https://clipy.online/mcp",
-  "version": "0.19.0",
+  "icons": [
+    {
+      "src": "https://clipy.online/brand/clipy-mark.svg",
+      "mimeType": "image/svg+xml",
+      "sizes": ["any"]
+    },
+    {
+      "src": "https://clipy.online/assets/clipy-icon.png",
+      "mimeType": "image/png",
+      "sizes": ["1024x1024"]
+    }
+  ],
+  "version": "0.20.0",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@clipy/mcp",
-      "version": "0.19.0",
+      "version": "0.20.0",
       "transport": {
         "type": "stdio"
       },
