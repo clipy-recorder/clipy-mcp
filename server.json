@@ -20,13 +20,13 @@
       "sizes": ["1024x1024"]
     }
   ],
-  "version": "0.20.0",
+  "version": "0.21.0",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@clipy/mcp",
-      "version": "0.20.0",
+      "version": "0.21.0",
       "transport": {
         "type": "stdio"
       },
