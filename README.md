@@ -4,9 +4,45 @@
 [![license: MIT](https://img.shields.io/npm/l/%40clipy%2Fmcp)](https://github.com/clipy-recorder/clipy-mcp/blob/main/LICENSE)
 [![node >= 18](https://img.shields.io/node/v/%40clipy%2Fmcp)](https://www.npmjs.com/package/@clipy/mcp)
 
-The official screen recording MCP server for [Clipy](https://clipy.online), the AI-native
-screen recorder: your AI agent searches your recordings and reads their transcripts, AI
-summaries and key moments.
+The official MCP server for [Clipy](https://clipy.online), the AI-native screen recorder.
+Record your screen and talk, the way you would show a colleague, and Claude Code, Codex,
+Cursor, ChatGPT, Claude or any other AI agent watches it: the transcript, AI summary, key
+moments and where you clicked, from the same share link a person watches with no signup.
+Your agent can record too.
+
+## Record and watch
+
+**You record, your agent watches.** Record on Mac, Windows, Chrome, the web, iPhone or
+Android and talk through what you mean: a bug, a design change, a product review, a
+customer workflow. Paste the link into your agent and it reads a timestamped transcript in
+about 40 languages, a summary with action items, chapters, key moments with a screenshot of
+each, and your clicks. Bug recordings from Chrome also carry console and network logs.
+
+**Your agent records.** The `record` tool and the live session tools let an agent record a
+web app headlessly, add markers and chapters as it checks each step, and hand back a Clipy
+link as proof of its work.
+
+**Ask your library.** `search_memory` finds the moment across every recording you made and
+every video you imported, and returns a link that opens at that point.
+
+## Screen recorder for Claude Code
+
+Two Claude Code plugins put recording and watching one command away:
+
+```text
+/plugin marketplace add clipy-recorder/clipy
+/plugin install record@clipy
+/plugin install watch@clipy
+```
+
+- `/record` starts a Clipy screen recording on your Mac or Windows PC. Talk Claude through
+  what you want, say stop, and Claude reads the recording (transcript, key moments and a
+  screenshot of each) and gets to work.
+- `/watch` lets Claude watch a YouTube video, a Loom link or a video file on your machine,
+  then answer questions about it with timestamps.
+
+Add this MCP server as well and Claude can read any Clipy link you paste, search your
+library and record its own verification runs.
 
 ## Quick start
 
@@ -24,10 +60,11 @@ npx @clipy/cli@latest login                              # approve once in the b
 claude mcp add --scope user clipy -- npx -y @clipy/mcp   # Codex, Cursor, Windsurf: see Setup
 ```
 
+Clipy is free to start: 7-day free trial, no card needed.
+
 ## What your agent gets
 
-Record your screen and talk. Then hand the link to your agent, the way you would show a
-colleague:
+Hand the link to your agent:
 
 ```text
 You:    Turn this bug-report recording into a Linear ticket:
@@ -39,27 +76,21 @@ Agent:  get_recording     status, duration, transcript and summary status
         get_key_moments   timestamps, captions and click coordinates
 ```
 
-No link to hand over? `search_memory` finds the moment across every recording you made
-and every video you imported, and returns a URL that opens at that point. The full list
-is under [Tools](#tools).
-
-This is a [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server. It lets
-Claude, Cursor, Windsurf, and other MCP-capable agents **search your recordings and your team
-library, and read their transcripts and AI summaries**, so you can do things like _"turn this bug-report
-recording into a Linear ticket"_ without leaving your agent. With the `record`
-tool, it can also **record a web app headlessly** and get it back as a Clipy recording (_"build the
-feature, then record the outcome"_).
+The full list is under [Tools](#tools). This is a
+[Model Context Protocol](https://modelcontextprotocol.io) (MCP) server, so it works in
+Claude Code, Codex, Cursor, Windsurf, ChatGPT, Claude and any other MCP client.
 
 The canonical cross-surface operating contract is
 **[clipy.online/agents.md](https://clipy.online/agents.md)**. For the exact
 connected MCP version and schemas, use the standard `tools/list` request.
 
 The read tools need the `recordings:read` scope, which every key gets by default. The
-write tools — `record`, the session tools (`start_recording`, `add_marker`, `add_chapter`,
-`stop_recording`, `abort_recording`), and `replace_transcript` — additionally need the
-key to carry the `ingest` scope ("Record & upload"), which the server enforces.
-`get_edit_transcript` and `edit_recording` need the `recordings:write` scope. A `recordings:read`-only key can
-read every recording you can open but cannot create, modify, or delete anything.
+write tools (`record`, the session tools `start_recording`, `add_marker`, `add_chapter`,
+`stop_recording` and `abort_recording`, and `replace_transcript`) also need the key to
+carry the `ingest` scope ("Record & upload"), which the server enforces.
+`get_edit_transcript` and `edit_recording` need the `recordings:write` scope. A
+`recordings:read`-only key can read every recording you can open but cannot create,
+modify, or delete anything.
 
 ## Setup
 
